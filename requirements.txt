@@ -1,0 +1,8 @@
+bokeh==2.4.3
+numpy==1.22.4
+pandas==1.4.2
+panel==0.13.1
+scipy==1.13.0
+neurokit2==0.2.7
+vitaldb==1.12.10
+yaml==1.2.2
