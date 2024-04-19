@@ -24,7 +24,13 @@ def open_config_yaml(directory):
 
 
 def give_me_df_with_parameters():
+    '''
+    Input: 
 
+    Function return a df with Time, ECG, co2 and Hr parameters
+
+    Output: df_class - dataframe placed in the class
+    '''    
     # We can also download interesting data and import values manually, but I suppose using an api for this is easier
     ecg_val = vitaldb.load_case(367, ['SNUADC/ECG_II','SNUADC/ECG_V5'], 1/500)
     hr_val = vitaldb.load_case(367,'Solar8000/HR', 2)
@@ -41,22 +47,30 @@ def give_me_df_with_parameters():
     time_co2 = np.arange(0, len(co2), 1) / 62.5
     time_hr = np.arange(0, len(hr), 1) * 2
 
-
+    # Data contain millions of values, so using np.array() - fastest way
     df = pd.DataFrame(np.array([time_ecg, ecg])).T
     df.rename(columns = {0:'Time', 1:'ECG'}, inplace = True )
     df2 = pd.DataFrame(np.array([time_co2, co2])).T
     df2.rename(columns = {0:'Time', 1:'co2'}, inplace = True )
     df3 = pd.DataFrame(np.array([time_hr, hr])).T
     df3.rename(columns = {0:'Time', 1:'Hr'}, inplace = True )
-
     df = df.merge(df2, on='Time', how='outer')
     df = df.merge(df3, on='Time', how='outer')
+
+    # Put raw data in the class
     df_class = classes.Data_store(df)
     return df_class
     
 
 def data_transformation(Data_store, start=0, stop=10000):
-    
+    '''
+    Input: 1. Data_store - element with type class and contain all raw info
+
+    Function return a final df with all data and list of peaks indexes
+
+    Output: 1. df_final - df with all data including transformed ECG and calculated Hr
+            2. list_of_peaks_index - list of peaks indexes
+    '''    
     ecg_f = Data_store.fourier_transform(np.array(Data_store.raw_data.loc[:,'ECG'])[start:stop])
 
     df_ecg_f = pd.DataFrame(np.array([np.array(Data_store.raw_data.loc[:,'Time'])[start:stop], ecg_f])).T
@@ -69,26 +83,45 @@ def data_transformation(Data_store, start=0, stop=10000):
 
 
 def graph_plotting(df_graph, places_dict=None, start=0, stop=10000, place=None):
+    '''
+    Input: 1. df_graph - df with raw data
+           2. places_dict - dictionary with different events/time 
+           3. start - start index in dataframe == time in seconds * 500
+           4. stop - stop index in dataframe == time in seconds * 500
+           5. place - name of the event from places_dict
+
+    Function return a plot (1 - graph with Hr and co2, 2 - ECG, ECG transformed, 3 - range tool)
+
+    Output: plot
+    '''   
     place_time = 0
 
+    # Just add one more event that not connect with lab_names
     if place == 'valueble changes':
         start = 7207000
-        stop = 14480*500
+        stop = 7240000
+    # Use values from dictionary
     elif places_dict:
         start = places_dict[place] - 10000
         stop = places_dict[place] + 10000
         place_time = (stop + start)//2//500
 
+    # Find final df
     df, peaks_filter = data_transformation(df_graph, start=start, stop=stop)
 
+    # Find df with peaks for highlighting
     df_circle = df[start:stop].iloc[peaks_filter]
     df_circle = df_circle.loc[df_circle.loc[:,'ECG_f'] < 0.4]
 
+    # Create filter for peaks
     view = CDSView(filter=IndexFilter(peaks_filter))
+    # Create Datasources
     source_ecg = ColumnDataSource(df[start:stop])
     source_co2 = ColumnDataSource(df[start:stop].dropna(subset=['co2']))
     source_hr = ColumnDataSource(df[start:stop].dropna(subset=['Hr']))
     source_hr_count = ColumnDataSource(df[start:stop].dropna(subset=['hr']))
+
+    # Create figure 1 and add layouts
     p = figure(height=400, width=1000, 
             background_fill_color="#efefef", x_range=(df.loc[:,'Time'][start], df.loc[:,'Time'][stop]), y_range=(-0.5, 2))
 
@@ -98,7 +131,8 @@ def graph_plotting(df_graph, places_dict=None, start=0, stop=10000, place=None):
     p.xaxis.axis_label = 'Time, s'
     p.scatter('Time', 'ECG_f', size=5, color='red',  hover_color="black", source=source_ecg, view=view)
     p.circle(x=df_circle['Time'], y=df_circle['ECG_f'], line_color='black', size=70, fill_alpha=0)
-
+    
+    # Add vertical line and label if place_time is active
     if place_time:
         p.vspan(x=place_time, line_width=[3], line_color="blue")
         label = Label(x=place_time, y=1.5, x_units='data', y_units='data', text=' ' + place + ' ',
@@ -106,6 +140,7 @@ def graph_plotting(df_graph, places_dict=None, start=0, stop=10000, place=None):
             border_line_color='black', border_line_alpha=1.0)
         p.add_layout(label)
 
+    # Create figure 2 and add layouts
     p2 = figure(height=400, width=1000, 
             background_fill_color="#efefef", x_range=p.x_range, y_range=(-5, df.loc[:,'hr'].max()+5))
 
@@ -115,6 +150,8 @@ def graph_plotting(df_graph, places_dict=None, start=0, stop=10000, place=None):
     p2.yaxis.axis_label = 'Hr signal / co2 signal'
     p2.xaxis.axis_label = 'Time, s'
     p2.hspan(y=100, line_width=[3], line_color="black")
+
+    # Add vertical line and label if place_time is active
     if place_time:
         p2.vspan(x=place_time, line_width=[3], line_color="blue")
         label = Label(x=place_time, y=80, x_units='data', y_units='data', text=' ' + place + ' ',
@@ -122,6 +159,7 @@ def graph_plotting(df_graph, places_dict=None, start=0, stop=10000, place=None):
             border_line_color='black', border_line_alpha=1.0)
         p2.add_layout(label)
 
+    # Create range tool
     select = figure(title="Drag the middle and edges of the selection box to change the range above",
                     height=150, width=1000,    y_range=p.y_range,
                     tools="", toolbar_location=None, background_fill_color="#efefef")

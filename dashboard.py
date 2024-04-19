@@ -5,12 +5,11 @@ import panel as pn
 
 from bokeh.models import RangeSlider
 
-import panel as pn
-#from bokeh.models.widgets import Div
 
 
 df_class = module.give_me_df_with_parameters()
 
+# Create a dictionary with different events/time 
 config = module.open_config_yaml('config\config.yaml')
 operation_events = {'operation start': config['time_opstart']*500, 'operation end': config['time_opend']*500, 
                     'anestesia end': config['time_anestend']*500, 'case end': config['time_caseend']*500}
@@ -18,11 +17,13 @@ operation_events = {'operation start': config['time_opstart']*500, 'operation en
 pn.extension(sizing_mode="stretch_width")
 
 places = pn.widgets.Select(options=['operation start', 'operation end', 'anestesia end', 'valueble changes'], sizing_mode='stretch_both')
+# Create buttons
 home_button = pn.widgets.Button(name='Home', button_type='light', align='start', width=175)
 place_of_interest_button = pn.widgets.Button(name='Place of interest', button_type='light', align='start', width=175)
 free_analysis_button = pn.widgets.Button(name='Free analysis', button_type='light', align='start', width=175)
 slider_button = pn.widgets.Button(name='Ok', button_type='light', align='start', width=50)
 
+# Create slider
 a = (9000, 10000)
 range_slider = RangeSlider(start=0, end=config['time_caseend'], value=(9000, 10000), step=1, title="Select the interval of interest")
 
@@ -32,6 +33,7 @@ def dashboard():
     dashboard_column = pn.Column()
     sidebar_column = pn.Column()
 
+    # Bind graph function and text with select widget
     graph = pn.bind(module.graph_plotting, df_graph = df_class, places_dict=operation_events, place=places)
     text = pn.bind(dashboard_text.text_intro, variable=places)
 
