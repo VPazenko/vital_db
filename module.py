@@ -21,7 +21,7 @@ def open_config_yaml(directory):
     with open(directory, 'r') as config_info:
         config_dict = yaml.safe_load(config_info)
     return config_dict
-
+ 
 
 def give_me_df_with_parameters():
     '''
@@ -175,3 +175,78 @@ def graph_plotting(df_graph, places_dict=None, start=0, stop=10000, place=None):
 
     return(column(p2, p, select))
 
+
+
+def give_values_for_streaming(df_class, start, stop):
+    """ 
+    Input: 1. df_class - dataframe placed in the class
+           3. start - start index in dataframe == time in seconds * 500
+           4. stop - stop index in dataframe == time in seconds * 500
+
+    Function, kind of, combination between data_transformation() and first steps of the graph_plotting()
+
+    Output: df_final - df with all data + interpolate for 'NaN' values (for the streaming)
+    """
+    ecg_f = df_class.fourier_transform(np.array(df_class.raw_data.loc[start:stop,'ECG']))
+    df_ecg_f = pd.DataFrame(np.array([np.array(df_class.raw_data.loc[start:stop,'Time']), ecg_f])).T
+    df_ecg_f.rename(columns = {0:'Time', 1:'ECG_f'}, inplace = True )
+    new_df = df_class.raw_data.merge(df_ecg_f, on='Time', how='outer')
+
+    df_p, list_of_peaks_index = df_class.find_peaks_and_hr(new_df)
+    df_final = new_df.merge(df_p.iloc[:,[1,6,7]], on='Time', how='outer')
+    df_final.iloc[:,[2,3,6]] = df_final.iloc[:,[2,3,6]] .interpolate(method='linear', axis=0)
+    df_final.loc[:, 'error peaks'] = np.where((df_final.loc[:, 'peaks'] == 1.0)&(df_final.loc[:, 'ECG_f'] < 0.4), df_final.loc[:, 'ECG_f'], np.nan)
+    
+    return df_final
+
+
+def graph_plotting_streaming(source):
+    '''
+    Input: 1. source - ColumnDataSource dictionary with all datas for these graphs
+
+    Function return a plot (1 - graph with Hr and co2, 2 - ECG, ECG transformed)
+
+    Output: plot
+    '''   
+
+    # Create figure 1 and add layouts
+    p = figure(height=400, width=1000, 
+            background_fill_color="#efefef", y_range=(-0.5, 2)) 
+
+    # ECG line
+    p.line('Time', 'ECG', source=source, color='green', legend_label='Original ECG')
+    # ECG transformed line
+    p.line('Time', 'ECG_f', source=source, color='red', legend_label='Fourier ECG')
+    
+    p.yaxis.axis_label = 'ECG signal'
+    p.xaxis.axis_label = 'Time, s'
+    
+    # ECG transformed dots
+    p.scatter('Time', 'ECG_f', size=5, color='red',  hover_color="black", source=source) 
+    # Big circles for the filtered peaks (too low values for the peaks)
+    p.circle('Time', 'error peaks', source=source, line_color='black', size=70, fill_alpha=0)
+
+    # Create figure 2 and add layouts
+    p2 = figure(height=400, width=1000, background_fill_color="#efefef", x_range=p.x_range)  
+
+    # co2 line
+    p2.line('Time', 'co2', source=source, color = "blue", legend_label='co2 level (breathing)')
+    # Hr line
+    p2.line('Time', 'Hr', source=source, color = "black", legend_label='Hr level (detected)')
+    # Hr calculated line
+    p2.line('Time', 'hr', source=source, color = "red", legend_label='Hr level (calculated)')
+    
+    p2.yaxis.axis_label = 'Hr signal / co2 signal'
+    p2.xaxis.axis_label = 'Time, s'
+    
+    # Limitation line (Hr > 100 bpm is dangerous)
+    p2.hspan(y=100, line_width=[3], line_color="black")
+
+    return (column(p2, p))
+
+
+
+if __name__ == "__main__":
+    print(__doc__)
+else:
+    print(f"Module '{__name__}' is imported successfully!\n")

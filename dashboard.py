@@ -2,11 +2,10 @@
 import module
 import dashboard_text
 import panel as pn
-
-from bokeh.models import RangeSlider
-
+from bokeh.models import RangeSlider, Slider, ColumnDataSource
 
 
+import time
 df_class = module.give_me_df_with_parameters()
 
 # Create a dictionary with different events/time 
@@ -16,16 +15,21 @@ operation_events = {'operation start': config['time_opstart']*500, 'operation en
 
 pn.extension(sizing_mode="stretch_width")
 
+# selection widget
 places = pn.widgets.Select(options=['operation start', 'operation end', 'anestesia end', 'valueble changes'], sizing_mode='stretch_both')
+
 # Create buttons
 home_button = pn.widgets.Button(name='Home', button_type='light', align='start', width=175)
 place_of_interest_button = pn.widgets.Button(name='Place of interest', button_type='light', align='start', width=175)
 free_analysis_button = pn.widgets.Button(name='Free analysis', button_type='light', align='start', width=175)
 slider_button = pn.widgets.Button(name='Ok', button_type='light', align='start', width=50)
+streaming_button = pn.widgets.Button(name='(Pseudo)Streaming', button_type='light', align='start', width=175)
+start_stream_button = pn.widgets.Button(name='Start', button_type='light', align='start', width=80)
 
-# Create slider
-a = (9000, 10000)
-range_slider = RangeSlider(start=0, end=config['time_caseend'], value=(9000, 10000), step=1, title="Select the interval of interest")
+# Create sliders
+range_slider = RangeSlider(start=2, end=config['time_caseend'], value=(1020, 2000), step=1, title="Select the interval of interest")
+speed_slider = Slider(start=1, end=50, value=5, step=1., title="Streaming speed")
+x_range_slider = Slider(start=500, end=5000, value=2000, step=50., title="Number of points (x range/500, s)")
 
 def dashboard():
     #home_page = pn.pane.HTML('<h1>Welcome to the Home Page!</h1>')
@@ -39,10 +43,9 @@ def dashboard():
 
     template = pn.template.FastListTemplate(
         title='Some key parameters of patient #0367 during surgery.',
-        sidebar=[home_button, place_of_interest_button, free_analysis_button, pn.layout.Divider(), pn.Spacer(height=25)],
+        sidebar=[home_button, place_of_interest_button, free_analysis_button, streaming_button, pn.layout.Divider(), pn.Spacer(height=25)],
         sidebar_width=200,
-        accent='#144A50'
-    )
+        accent='#144A50')
 
     # Append the sidebar and dashboard columns to the template
     template.sidebar.append(sidebar_column)
@@ -86,8 +89,20 @@ def dashboard():
         # Add the contents to the dashboard layout
         dashboard_column.append(pn.Row(graph, text))
 
+    def streaming_click(event):
+        # Clear the sidebar and dashboard layout
+        dashboard_column.clear()
+        sidebar_column.clear()
+
+        # Add the contents to the dashboard layout
+        dashboard_column.append(pn.Column(range_slider, pn.Spacer(height=15), speed_slider, pn.Spacer(height=15), x_range_slider))
+        dashboard_column.append(pn.Spacer(height=30))
+        dashboard_column.append(start_stream_button)
+        dashboard_column.append(pn.Spacer(height=30))
+
+
     def slider_click(event):
-        # read slider value
+        # read the slider value
         a = range_slider.value
 
         # Add the contents to the dashboard layout
@@ -96,11 +111,46 @@ def dashboard():
         dashboard_column.append(pn.Spacer(height=25))
         dashboard_column.append(graph2)
 
+
+    def start_click(event):
+        # read the slider values
+        range_s = range_slider.value
+        speed = speed_slider.value
+        x_range = x_range_slider.value
+        # Clear old plot (if exist)
+        streaming_click(event=1)
+        
+        # Calculate start and stop indexes
+        start=int(range_s[0])*500
+        stop=int(range_s[1])*500
+
+        # Add the contents to the dashboard layout
+        dashboard_column.append(pn.pane.HTML('<b>Please wait. Preprocessing in progress. It may takes time.</b>'))
+
+        # Define source and draw a graph
+        df_final = module.give_values_for_streaming(df_class, start-200, stop)
+        source = ColumnDataSource(df_final[start-100:start])
+        new_graph = module.graph_plotting_streaming(source)
+        dashboard_column.append(new_graph)
+
+        # start data transfer to the graph with the speed of 'speed' values.
+        for i in range(start, stop, speed):
+            new_start = i
+            new_stop = i + speed 
+            
+            # Add new data. IF number of datapoints became large then 'rollover', function rewrite old values
+            source.stream({'ECG': df_final.loc[new_start:new_stop, 'ECG'], 'Time': df_final.loc[new_start:new_stop, 'Time'], 'ECG_f': df_final.loc[new_start:new_stop,
+                            'ECG_f'], 'index': df_final.loc[new_start:new_stop, 'peaks'], 'Hr': df_final.loc[new_start:new_stop, 'Hr'], 
+                            'co2': df_final.loc[new_start:new_stop, 'co2'], 'hr': df_final.loc[new_start:new_stop, 'hr'], 'peaks': df_final.loc[new_start:new_stop, 'peaks'],
+                            'error peaks': df_final.loc[new_start:new_stop, 'error peaks']}, rollover=x_range)
+
     # Execute the click functions when the user clicks on a button
     home_button.on_click(home_click)
     free_analysis_button.on_click(free_analysis_click)
     place_of_interest_button.on_click(place_of_interest_click)
+    streaming_button.on_click(streaming_click)
     slider_button.on_click(slider_click)
+    start_stream_button.on_click(start_click)
 
     return template
 

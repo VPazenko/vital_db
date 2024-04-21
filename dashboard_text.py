@@ -14,8 +14,10 @@ def text_intro(variable):
                         " as a data stream (the result delay / offset is 100 values).</p>"
                         "<p>Peaks were found from the filtered signal (using the neurokit library). From these peaks was obtained the calculated heart rate values."
                         "On the 'Place of interest' page you can see details of three potentially dangerous areas: near the 'Operation start', 'Operation end' and 'Anestesia end'.</p>"
-                        "<p>On the 'Free analysis' page you can choose your own interval.</p>", styles={'font-size': '16px'})
-
+                        "<p>On the 'Free analysis' page you can choose your own interval.</p>"
+                        "<p>On the '(Pseudo)Streaming' page you can choose your own interval, preferred update rate (number of values) and x-axis resolution " 
+                        "(number of values / 500 = number of seconds).</p>", styles={'font-size': '16px'})
+ 
     elif variable == 'operation start':
         text_box = Div(text="As we can see, just before and immediately after the start of the operation, the patient had irregularly cardiac rhythm (highlighted on the graph).<br \>"
                        "Also, at some moments, the calculated heart rate was above normal (above 100 bpm). Respiration was normal.", styles={'font-size': '16px'})

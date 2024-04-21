@@ -18,7 +18,7 @@ def fir_filter(y, h):
         zi = sum(history[i]*h[h.size - i - 1] for i in range(h.size))
         yield zi
 
-
+ 
 #Data store and convert:
 class Data_store:
     """
@@ -71,7 +71,7 @@ class Data_store:
         df_peaks.loc[:,'hr'] = 60 / df_peaks.loc[:,'diff']
         df_peaks = df_peaks.drop('diff', axis=1)               
         return df_peaks, info['ECG_R_Peaks_Uncorrected']
-    
+
 
 if __name__ == "__main__":
     print(__doc__)
