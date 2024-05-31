@@ -246,6 +246,101 @@ def graph_plotting_streaming(source):
 
 
 
+def rolling_window(np_array, window, step=1):
+    '''
+    Input: 1. np_array - 1D-array
+           2. window - the size of the window
+           3. step - the size of the "sliding" action
+
+    The function return a 1D-array with smoothing data.
+    Slightly modified version of https://gist.github.com/tclements/7452c0fac3e66e08b886300b4e24e687
+    *Work 3 times faster then Pandas 'rolling'
+
+    Output: 1D-array with smoothing data
+    '''
+    # Create a 2D - array with shape (np_array.size - window + 1, window) (if step == 1)
+    shape = np_array.shape[:-1] + ((np_array.shape[-1] - window + 1)//step, window)
+    strides = (np_array.strides[0] * step,) + (np_array.strides[-1],)
+    # Count mean value for each row and return mean_values 1D-array
+    return np.mean(np.lib.stride_tricks.as_strided(np_array, shape=shape, strides=strides), axis=1)
+
+
+def find_period(np_array, sampling_rate=500):
+    '''
+    Input: 1. np_array - 1D-array
+           2. sampling_rate - for the 'Arterial pressure wave' rate = 500 Hz
+
+    The function searches for the Maximum period of oscillation in a certain range 
+    (unit wave element) using the Fourier transform.
+
+    Output: Period for unit wave element
+    '''
+    # Standart Fourier transformation
+    c = np.fft.fft(np_array, norm='forward')
+    f = np.fft.fftfreq(np_array.size, d=1/sampling_rate)
+    # Condition that help to find only one oscilation
+    cond = (f > 0.2)&(f < 1.5)
+    # Find max value
+    fmax = f[np.argmax(np.abs(c) * cond)]
+    # Find period
+    return round(fmax*sampling_rate)
+
+
+def find_min_max_average(np_array, period):
+    '''
+    Input: 1. np_array - 1D-array
+           2. period - The number of points for one oscillation (approx)
+
+    The function returns an array where each oscillation is described 
+    [start_value, maximum_value, average_value, start_index]
+    
+    in this case:
+    Start value = Diastolic pressure
+    Maximum value = Systolic pressure
+    Mean value = mean arterial pressure
+
+    The mean value is calculated through the integral area.
+
+    Output: 2D-array with shape (number of waves, 4)
+    '''    
+    value_list = np.array([0, 0, 0, 0])
+    # Waveform contain between two lowest points
+    # Index of left border of element (wave)
+    min_left = 0
+    # Index of right border of element (wave)
+    min_right = 0
+    # Index of max. value of element
+    max_vavue = 0
+    # Integral average
+    average = 0
+    # To reduce the effect of fluctuation, increase the period by some number of points (50)
+    period = period + 50
+
+    # Find left border of first element
+    min_left = np_array[(0) * period : (1) * period].argmin()
+
+    # Do while number of points more then period
+    while (np_array.size - min_l) > period:
+        # Find index of right border of element and max value between this borders
+        min_r = np_array[min_l + 10 : min_l + period].argmin() + min_l + 10
+        max_v = np_array[min_l:min_r].argmax() + min_l
+
+        # If difference between min and max values too small ==> element not a waveform. Miss this area
+        if np_array[max_v] - np_array[min_l] < 5:
+            # Shift to the next wave (end of the previous wave = beginning of the next)
+            min_l = min_r
+            continue
+
+        # Find the average with trapz function
+        average = (np.trapz(np_array[min_l:min_r], dx=1)) / (min_r - min_l)
+        # Add values to array
+        value_list = np.vstack([value_list, np.array([round(np_array[min_l]), round(np_array[max_v]), round(average), min_l])])
+        # Shift to the next wave
+        min_l = min_r
+    # Exclude first value *( [0, 0, 0, 0] )
+    return value_list[1:]
+
+
 if __name__ == "__main__":
     print(__doc__)
 else:
