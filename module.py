@@ -320,25 +320,64 @@ def find_min_max_average(np_array, period):
     min_left = np_array[(0) * period : (1) * period].argmin()
 
     # Do while number of points more then period
-    while (np_array.size - min_l) > period:
+    while (np_array.size - min_left) > period:
         # Find index of right border of element and max value between this borders
-        min_r = np_array[min_l + 10 : min_l + period].argmin() + min_l + 10
-        max_v = np_array[min_l:min_r].argmax() + min_l
+        min_right = np_array[min_left + 10 : min_left + period].argmin() + min_left + 10
+        max_vavue = np_array[min_left:min_right].argmax() + min_left
 
         # If difference between min and max values too small ==> element not a waveform. Miss this area
-        if np_array[max_v] - np_array[min_l] < 5:
+        if np_array[max_vavue] - np_array[min_left] < 5:
             # Shift to the next wave (end of the previous wave = beginning of the next)
-            min_l = min_r
+            min_left = min_right
             continue
 
         # Find the average with trapz function
-        average = (np.trapz(np_array[min_l:min_r], dx=1)) / (min_r - min_l)
+        average = (np.trapz(np_array[min_left:min_right], dx=1)) / (min_right - min_left)
         # Add values to array
-        value_list = np.vstack([value_list, np.array([round(np_array[min_l]), round(np_array[max_v]), round(average), min_l])])
+        value_list = np.vstack([value_list, np.array([round(np_array[min_left]), round(np_array[max_vavue]), round(average), min_left])])
         # Shift to the next wave
-        min_l = min_r
+        min_left = min_right
     # Exclude first value *( [0, 0, 0, 0] )
     return value_list[1:]
+
+
+def abp_from_raw_to_df(np_array, rate=500):
+    '''
+    Input: 1. np_array - 1D-array
+           2. rate - for the 'Arterial pressure wave' rate = 500 Hz
+
+    The function combine other functions and process raw ABP signal to pd DataFrame with a lot of different data
+
+    Output: pd.DataFrame (columns = 'Time','ABP', 'Dia BP',	'Sys BP', 'Mean AP', 'diff')
+    '''
+    # Clearing the data. Anything below 25 and above 200 
+    np_array.clip(min=25, out=np_array)
+    np_array.clip(max=200, out=np_array)
+    # Smoothing data
+    np_array = rolling_window(np_array[:,0], 10, 1)
+    # Find Preassure values (Sys, Dia, MAP)
+    period = find_period(np_array, sampling_rate=rate)
+    v_list = find_min_max_average(np_array, period)
+    # Add time values
+    time_abp = np.arange(0, np_array.size, 1) * 1/500
+
+    # Data contain millions of values, so using np.array() - fastest way
+    df1 = pd.DataFrame(np.array([time_abp, np_array])).T
+    df2 = pd.DataFrame(v_list)
+    df2 = df2.set_index(3)
+    # Combine all received values into one dataframe
+    merged_df = pd.merge(df1, df2, left_index=True, right_index=True, how='left')
+    # Rename columns
+    merged_df.columns = ['Time', 'ABP', 'Dia BP', 'Sys BP', 'Mean AP']
+    # Add time difference (duration of every wave)
+    merged_df.loc[:,'diff'] = merged_df.loc[merged_df['Mean AP'].notna(),'Time'].diff(periods=1)
+    # Fill preassure values for the graph 
+    merged_df.iloc[:,[2,3,4]] = merged_df.iloc[:,1:].bfill()
+
+    return merged_df
+
+
+
 
 
 if __name__ == "__main__":
